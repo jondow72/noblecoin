@@ -1,7 +1,7 @@
 TEMPLATE = app
 TARGET = noblecoin-qt
 macx:TARGET = "Noblecoin-Qt"
-VERSION = 2.1.1.2
+VERSION = 2.1.2.0
 
 INCLUDEPATH += src src/json src/qt
 QT += core gui network

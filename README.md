@@ -3,6 +3,12 @@
 
 Noblecoin is a Hybrid-based cryptocurrency. Pos VII and POW M7M 
 
+### Version 2.1.2.0: Client Update
+LlibSSL3.0 support Debian 12 Ubuntu 22.04
+Boost 1.74+ support Debian 12 Ubuntu 22.04
+removed strlcpy.h so it will compile on  Ubuntu 24.04.1
+Updated dns and ip node seeds.
+
 ### Version 2.1.1.2: Small Client Update
 Update of checkpoints
 
