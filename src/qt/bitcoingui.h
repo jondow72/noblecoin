@@ -4,6 +4,8 @@
 #include <QMainWindow>
 #include <QSystemTrayIcon>
 
+#include "util.h" // for uint64
+
 class TransactionTableModel;
 class ClientModel;
 class WalletModel;
@@ -67,6 +69,7 @@ private:
     SignVerifyMessageDialog *signVerifyMessageDialog;
 
     QLabel *labelEncryptionIcon;
+    QLabel *labelMintingIcon;
     QLabel *labelConnectionsIcon;
     QLabel *labelBlocksIcon;
     QLabel *progressBarLabel;
@@ -81,6 +84,9 @@ private:
     QAction *signMessageAction;
     QAction *verifyMessageAction;
     QAction *aboutAction;
+    
+    QAction *editConfigFileAction;
+    
     QAction *receiveCoinsAction;
     QAction *optionsAction;
     QAction *toggleHideAction;
@@ -88,6 +94,7 @@ private:
     QAction *encryptWalletAction;
     QAction *backupWalletAction;
     QAction *changePassphraseAction;
+    QAction *lockWalletToggleAction;
     QAction *aboutQtAction;
     QAction *openRPCConsoleAction;
 
@@ -97,6 +104,12 @@ private:
     RPCConsole *rpcConsole;
 
     QMovie *syncIconMovie;
+
+    uint64 nMinWeight, nMaxWeight;
+    uint64 nWeight;
+    uint64 nNetworkWeight;
+
+    int spinnerFrame;
 
     /** Create the main UI actions. */
     void createActions();
@@ -152,6 +165,9 @@ private slots:
     void optionsClicked();
     /** Show about dialog */
     void aboutClicked();
+    /** Open config file */
+    void openConfigfile();
+    
 #ifndef Q_OS_MAC
     /** Handle tray icon clicked */
     void trayIconActivated(QSystemTrayIcon::ActivationReason reason);
@@ -167,13 +183,20 @@ private slots:
     void backupWallet();
     /** Change encrypted wallet passphrase */
     void changePassphrase();
-    /** Ask for passphrase to unlock wallet temporarily */
-    void unlockWallet();
+    /** Toggle unlocking wallet temporarily */
+    void lockWalletToggle();
+
+ void unlockWallet();
 
     /** Show window if hidden, unminimize when minimized, rise when obscured or show if hidden and fToggleHidden is true */
     void showNormalIfMinimized(bool fToggleHidden = false);
     /** simply calls showNormalIfMinimized(true) for use in SLOT() macro */
     void toggleHidden();
+
+    /** Update info about minting */
+    void updateMintingIcon();
+    /** Update minting weight info */
+    void updateMintingWeights();
 };
 
 #endif

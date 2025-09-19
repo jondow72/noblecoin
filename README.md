@@ -1,13 +1,46 @@
 
-NovaCoin official development tree
+# NobleCoin [NOBL] #
 
-NovaCoin - a hybrid scrypt PoW + PoS based cryptocurrency.
+Noblecoin is a Hybrid-based cryptocurrency. Pos VII and POW M7M 
 
-* 10 minute block spacing
-* The PoW subsidy halves every x64 multiply of PoW difficulty
-* The PoS interest halves every x64 multiply of PoS difficulty
-* Maximum PoW reward is 100 coins
-* ~ 2 billion total coins
+### Version 2.1.1.2: Small Client Update
+Update of checkpoints
+
+Open Config file from menu
+
+### Version 2.1.1.1: Small Client Update (Needed for Linux Compilation)
+Linux Compile Fix
+
+OpenSSL 1.1.1 Compatiblilty
+
+### Version 2.1.1.0: Client Update - LevelDB + Fast Start-up
+Switch from Berkeley database to google LevelDB (1 file version)
+Integrated fast start-up
+Client update to work with boost 1.66
+
+Version 2.1.1.0 is fully compatible with v2.1.0.0. Update is not necesssary.
+Because of switch to levelDB and fast-startup, the local database needs to recreated, 
+either from bootstrap or ReSync.
+
+Preferred Update Method: (BACKUP wallet.dat BEFORE PROCEEDING !!!)
+
+Go to wallet folder of v2.1.0.0 (or older v2.0.4.x) and remove all files except wallet.dat and Blk001.dat. Rename Blk001.dat to bootstrap.dat. Copy Wallet client v2.1.1.0 in this folder. Client will start-up and import blocks from local bootstrap. This can take up to 24 hours to complete. Client will rename bootstrap file automatically when finished and continu working normally.
+
+### Version 2.1.0.0: Fork @ Height 1610644
+Fork to transition to permanent hybrid wallet with POS V2 and POW (M7M) 
+A reload of the blockchain is not necessary.
+POW reward has been set at 5 NOBL.
+Protocol version increased to 90000. Lower versions are disabled.
+
+
+### Version < 2.1.0.0:
+are no longer compatible. They will not accept the new POW blocks.
+Upgrade to at least version 2.1.0.0 is mandatory.
+
+
+
+
+
 
 Development process
 ===========================
@@ -22,7 +55,7 @@ or are controversial.
 
 The master branch is regularly built and tested, but is not guaranteed
 to be completely stable. Tags are regularly created to indicate new
-official, stable release versions of NovaCoin.
+stable release versions of Noblecoin.
 
 Feature branches are created when there are major new features being
 worked on by several people.

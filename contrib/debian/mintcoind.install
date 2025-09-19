@@ -1,0 +1,2 @@
+debian/bin/noblecoind usr/bin
+src/noblecoind usr/lib/noblecoin

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Noblecoin
+Comment=Noblecoin P2P Cryptocurrency
+Comment[fr]=Noblecoin, monnaie virtuelle cryptographique pair à pair
+Comment[tr]=Noblecoin, eşten eşe kriptografik sanal para birimi
+Comment[es]=Noblecoin, una criptomoneda P2P
+Exec=/usr/bin/noblecoin-qt
+Terminal=false
+Type=Application
+Icon=/usr/share/pixmaps/bitcoin80.xpm
+MimeType=x-scheme-handler/noblecoin;
+Categories=Office;

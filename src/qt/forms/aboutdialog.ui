@@ -7,12 +7,42 @@
     <x>0</x>
     <y>0</y>
     <width>593</width>
-    <height>319</height>
+    <height>331</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>About NovaCoin</string>
+   <string>About Noblecoin</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog {
+    background-color: #222;
+}
+
+QLabel {
+    color: white;
+}
+
+QPushButton, QToolButton {
+    border: 4px solid #111;
+    border-radius: 12px;
+    background-color: #111;
+    color: white;
+    padding: 6px;
+    margin: 6px;
+}
+QPushButton:pressed, QToolButton:checked {
+    color: #cca000;
+}
+QPushButton:pressed, QToolButton:pressed {
+    border-color: #cca000;
+    color: #cca000;
+}
+QPushButton:disabled, QToolButton:disabled {
+    color: #444;
+    background-color: #222;
+}</string>
+  </property>
+
   <layout class="QHBoxLayout" name="horizontalLayout_2">
    <item>
     <widget class="QLabel" name="label_4">
@@ -50,7 +80,7 @@
           <cursorShape>IBeamCursor</cursorShape>
          </property>
          <property name="text">
-          <string>&lt;b&gt;NovaCoin&lt;/b&gt; version</string>
+          <string>&lt;b&gt;Noblecoin&lt;/b&gt; version</string>
          </property>
          <property name="textInteractionFlags">
           <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
@@ -91,7 +121,11 @@
         <cursorShape>IBeamCursor</cursorShape>
        </property>
        <property name="text">
-        <string>Copyright © 2009-2012 The NovaCoin developers</string>
+        <string>
+Copyright © 2009-2012 Bitcoin Developers
+Copyright © 2012 PPCoin Developers
+Copyright © 2014-2015 Noblecoin Developers
+</string>
        </property>
        <property name="textInteractionFlags">
         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
@@ -105,7 +139,7 @@
        </property>
        <property name="text">
         <string>
-This is experimental software.
+This is experimental software. If you don't treat it as such, you're likely to put an eye out!
 
 Distributed under the MIT/X11 software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php.
 

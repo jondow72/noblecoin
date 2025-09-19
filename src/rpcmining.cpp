@@ -5,6 +5,7 @@
 
 #include "main.h"
 #include "db.h"
+#include "txdb.h"
 #include "init.h"
 #include "bitcoinrpc.h"
 
@@ -43,7 +44,8 @@ Value setgenerate(const Array& params, bool fHelp)
     }
     mapArgs["-gen"] = (fGenerate ? "1" : "0");
 
-    GenerateBitcoins(fGenerate, pwalletMain);
+    assert(pwalletMain != NULL);
+    GenerateNoblecoin(fGenerate, pwalletMain);
     return Value::null;
 }
 
@@ -60,27 +62,227 @@ Value gethashespersec(const Array& params, bool fHelp)
     return (boost::int64_t)dHashesPerSec;
 }
 
-
 Value getmininginfo(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
             "getmininginfo\n"
             "Returns an object containing mining-related information.");
+    uint64 nWeight = 0, nMinWeight = 0, nMaxWeight = 0;
+    pwalletMain->GetStakeWeight(nMinWeight, nMaxWeight, nWeight);
+    int64_t nNetWorkWeit = GetPoSKernelPS();
+    uint64 nEstimateTime = 90 * GetPoSKernelPS() / nWeight;
+    double rAPR = APR_PROOF_OF_STAKE;
 
-    Object obj;
-    obj.push_back(Pair("blocks",        (int)nBestHeight));
-    obj.push_back(Pair("currentblocksize",(uint64_t)nLastBlockSize));
-    obj.push_back(Pair("currentblocktx",(uint64_t)nLastBlockTx));
-    obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
-    obj.push_back(Pair("errors",        GetWarnings("statusbar")));
-    obj.push_back(Pair("generate",      GetBoolArg("-gen")));
-    obj.push_back(Pair("genproclimit",  (int)GetArg("-genproclimit", -1)));
-    obj.push_back(Pair("hashespersec",  gethashespersec(params, false)));
-    obj.push_back(Pair("pooledtx",      (uint64_t)mempool.size()));
-    obj.push_back(Pair("testnet",       fTestNet));
+    Object obj, diff, blockvalue, weight;
+    obj.push_back(Pair("blocks",           (int)nBestHeight));
+    obj.push_back(Pair("currentblocksize", (uint64_t)nLastBlockSize));
+    obj.push_back(Pair("currentblocktx",   (uint64_t)nLastBlockTx));
+
+    diff.push_back(Pair("proof-of-work",   GetDifficulty()));
+    diff.push_back(Pair("proof-of-stake",  GetDifficulty(GetLastBlockIndex(pindexBest, true))));
+    diff.push_back(Pair("search-interval", (int)nLastCoinStakeSearchInterval));
+    obj.push_back(Pair("difficulty",       diff));
+
+    obj.push_back(Pair("netmhashps",       GetPoWMHashPS()));
+    obj.push_back(Pair("netstakeweight",   GetPoSKernelPS()));
+//    obj.push_back(Pair("netstakeweightV2", GetPoSKernelPSV2()));
+//    obj.push_back(Pair("netstakeweightV3", GetPoSKernelPSV3()));
+    obj.push_back(Pair("errors",           GetWarnings("statusbar")));
+    obj.push_back(Pair("pooledtx",         (uint64_t)mempool.size()));
+
+    weight.push_back(Pair("minimum",       (uint64_t)nMinWeight));
+    weight.push_back(Pair("maximum",       (uint64_t)nMaxWeight));
+    weight.push_back(Pair("combined",      (uint64_t)nWeight));
+    obj.push_back(Pair("stakeweight",      weight));
+    if (nEstimateTime < 60)
+    {
+	obj.push_back(Pair("Expected PoS (seconds)", (uint64_t)nEstimateTime));
+    }
+    else if (nEstimateTime < 60*60)
+    {
+	obj.push_back(Pair("Expected PoS (minutes)", (uint64_t)nEstimateTime/60));
+    }
+    else if (nEstimateTime < 24*60*60)
+    {
+	obj.push_back(Pair("Expected PoS (hours)", (uint64_t)nEstimateTime/(60*60)));
+    }
+    else
+    {
+	obj.push_back(Pair("Expected PoS (days)", (uint64_t)nEstimateTime/(60*60*24)));
+    }
+    obj.push_back(Pair("stakeinterest",    rAPR));
+    obj.push_back(Pair("testnet",          fTestNet));
+
+    obj.push_back(Pair("generate",         GetBoolArg("-gen")));
+    obj.push_back(Pair("genproclimit",     (int)GetArg("-genproclimit", -1)));
+    obj.push_back(Pair("hashespersec",     gethashespersec(params, false)));
+    obj.push_back(Pair("networkhashps",    getnetworkhashps(params, false)));
+    obj.push_back(Pair("testnet",          fTestNet));
     return obj;
 }
+
+// hashrate = diff * 2^32/180 = diff * 4 294 967 296 / 180 (180 - PoW block time)
+double GetPoWHashPS(int lookup, int height)
+{
+    if (pindexBest == NULL)
+        return 0;
+    if (pindexBest->nHeight >= MAX_POW_HEIGHT)
+        return 0;
+
+    const CBlockIndex *pindex0 = pindexBest;
+
+    if (height > 0 && height < nBestHeight)
+        pindex0 = FindBlockByHeight(height);
+
+    if (pindex0 == NULL || !pindex0->nHeight)
+        return 0;
+
+    if (lookup > pindex0->nHeight)
+        lookup = pindex0->nHeight;
+
+    const CBlockIndex* pindexPrev = GetLastPoWBlockIndex(pindex0);
+    if (pindexPrev == NULL || !pindexPrev->nHeight) return 0;
+    const CBlockIndex* pindexPrevPrev = GetLastPoWBlockIndex(pindexPrev->pprev);
+    if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) return 0;
+
+    int64_t nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime(), nActualBlockTimeTot = nActualBlockTime;
+    int64_t nBlockWeight = 1;
+    if (nActualBlockTime < 0) 
+    {
+	nActualBlockTimeTot = 0;
+	nBlockWeight = 0;
+    }
+
+    for(int i = 1; i < lookup; i++)
+    {
+	pindexPrev = pindexPrevPrev;
+	pindexPrevPrev = GetLastPoWBlockIndex(pindexPrev->pprev);
+	if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) break;
+	nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+	if (nActualBlockTime >= 0)
+	{
+	    nActualBlockTimeTot += nActualBlockTime;
+	    nBlockWeight++;
+	}
+    }
+    if (nActualBlockTimeTot == 0 || nBlockWeight == 0) return 0;
+    
+    return GetDifficulty(GetLastPoWBlockIndex(pindex0)) * pow(2.0, 32) / ((double)nActualBlockTimeTot / (double)nBlockWeight);
+}
+
+double GetPoWMHashPS() {
+    return GetPoWHashPS(120, -1) / 1.e6;
+}
+
+double GetPoWMHashPS_old()
+{
+    if (pindexBest->nHeight >= MAX_POW_HEIGHT)
+        return 0;
+
+    int nPoWInterval = 72;
+    int64_t nTargetSpacingWorkMin = 30, nTargetSpacingWork = 30;
+
+    CBlockIndex* pindex = pindexGenesisBlock;
+    CBlockIndex* pindexPrevWork = pindexGenesisBlock;
+
+    while (pindex)
+    {
+        if (pindex->IsProofOfWork())
+        {
+            int64_t nActualSpacingWork = pindex->GetBlockTime() - pindexPrevWork->GetBlockTime();
+            nTargetSpacingWork = ((nPoWInterval - 1) * nTargetSpacingWork + nActualSpacingWork + nActualSpacingWork) / (nPoWInterval + 1);
+            nTargetSpacingWork = max(nTargetSpacingWork, nTargetSpacingWorkMin);
+            pindexPrevWork = pindex;
+        }
+
+        pindex = pindex->pnext;
+    }
+
+    return GetDifficulty() * 4294.967296 / nTargetSpacingWork;
+}
+
+Value GetNetworkHashPS(int lookup, int height) {
+    return (boost::int64_t)(GetPoWHashPS(lookup, height));
+}
+
+// Litecoin: Return average network hashes per second based on last number of blocks despite PoW or PoS
+Value GetNetworkHashPS_old(int lookup) {
+    if (pindexBest == NULL)
+        return 0;
+
+    // If lookup is -1, then use blocks since last difficulty change.
+//    if (lookup <= 0)
+//        lookup = pindexBest->nHeight % 2016 + 1;
+
+    // If lookup is larger than chain, then set it to chain length.
+    if (lookup > pindexBest->nHeight)
+        lookup = pindexBest->nHeight;
+
+    CBlockIndex* pindexPrev = pindexBest;
+    for (int i = 0; i < lookup; i++)
+        pindexPrev = pindexPrev->pprev;
+
+    double timeDiff = pindexBest->GetBlockTime() - pindexPrev->GetBlockTime();
+    double timePerBlock = timeDiff / lookup;
+
+    return (boost::int64_t)(((double)GetDifficulty() * pow(2.0, 32)) / timePerBlock);
+}
+
+
+Value getnetworkhashps(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2)
+        throw runtime_error(
+            "getnetworkhashps [blocks] [height]\n"
+            "Returns the estimated network PoW hashes per second.\n"
+            "Pass in [blocks] to override default number (120) of blocks to average block time.\n"
+            "Pass in [height] to estimate the network speed at the time when a certain block was found.\n"
+	    "Always return the hash rate of the nearest PoW block.");
+    int height = params.size() > 1 ? params[1].get_int() : -1;
+    int lookup = params.size() > 0 ? params[0].get_int() : 120;
+    if (lookup < 1)
+        throw runtime_error(
+            "The number of blocks to be averaged must be greater than 1.");
+    if (height != -1 && height < 1)
+        throw runtime_error(
+            "The block height must be greater than 1.");
+    return GetNetworkHashPS(lookup, height);
+}
+
+
+Value getnetstakeweight(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2)
+        throw runtime_error(
+            "getnetstakeweight [blocks] [height]\n"
+            "Returns the estimated net stake weight (PoS).\n"
+            "Pass in [blocks] to override default number (72) of blocks for the average.\n"
+            "Pass in [height] to estimate the net stake weight at the time when a certain block was found.");
+    if (pindexBest == NULL)
+	return 0;
+
+    int height = params.size() > 1 ? params[1].get_int() : -1;
+    int lookup = params.size() > 0 ? params[0].get_int() : 72;
+    if (lookup < 1)
+        throw runtime_error(
+            "The number of blocks to be averaged must be greater than 1.");
+    if (height != -1 && height < 10080)
+        throw runtime_error(
+            "PoS block height must be greater than 10080.");
+
+    const CBlockIndex *pindex0 = pindexBest;
+    if (height > 0 && height < nBestHeight)
+	pindex0 = FindBlockByHeight(height);
+    if (pindex0 == NULL || !pindex0->nHeight)
+	return 0;
+    
+    if (lookup > pindex0->nHeight)
+	lookup = pindex0->nHeight;
+
+    return GetPoSKernelPS(pindex0, lookup);
+}
+
 
 Value getworkex(const Array& params, bool fHelp)
 {
@@ -91,10 +293,10 @@ Value getworkex(const Array& params, bool fHelp)
         );
 
     if (vNodes.empty())
-        throw JSONRPCError(-9, "NovaCoin is not connected!");
+        throw JSONRPCError(-9, "Noblecoin is not connected!");
 
     if (IsInitialBlockDownload())
-        throw JSONRPCError(-10, "NovaCoin is downloading blocks...");
+        throw JSONRPCError(-10, "Noblecoin is downloading blocks...");
 
     typedef map<uint256, pair<CBlock*, CScript> > mapNewBlock_t;
     static mapNewBlock_t mapNewBlock;
@@ -225,10 +427,10 @@ Value getwork(const Array& params, bool fHelp)
             "If [data] is specified, tries to solve the block and returns true if it was successful.");
 
     if (vNodes.empty())
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "NovaCoin is not connected!");
+        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Noblecoin is not connected!");
 
     if (IsInitialBlockDownload())
-        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "NovaCoin is downloading blocks...");
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Noblecoin is downloading blocks...");
 
     typedef map<uint256, pair<CBlock*, CScript> > mapNewBlock_t;
     static mapNewBlock_t mapNewBlock;    // FIXME: thread safety
@@ -236,7 +438,7 @@ Value getwork(const Array& params, bool fHelp)
     static CReserveKey reservekey(pwalletMain);
 
     if (params.size() == 0)
-    {
+    { 
         // Update block
         static unsigned int nTransactionsUpdatedLast;
         static CBlockIndex* pindexPrev;
@@ -291,7 +493,7 @@ Value getwork(const Array& params, bool fHelp)
 
         uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
 
-        Object result;
+        Object result; // HexStr: inverst bytes
         result.push_back(Pair("midstate", HexStr(BEGIN(pmidstate), END(pmidstate)))); // deprecated
         result.push_back(Pair("data",     HexStr(BEGIN(pdata), END(pdata))));
         result.push_back(Pair("hash1",    HexStr(BEGIN(phash1), END(phash1)))); // deprecated
@@ -303,7 +505,9 @@ Value getwork(const Array& params, bool fHelp)
         // Parse parameters
         vector<unsigned char> vchData = ParseHex(params[0].get_str());
         if (vchData.size() != 128)
+	{
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter");
+	}
         CBlock* pdata = (CBlock*)&vchData[0];
 
         // Byte reverse
@@ -320,8 +524,11 @@ Value getwork(const Array& params, bool fHelp)
         pblock->vtx[0].vin[0].scriptSig = mapNewBlock[pdata->hashMerkleRoot].second;
         pblock->hashMerkleRoot = pblock->BuildMerkleTree();
 
+
         if (!pblock->SignBlock(*pwalletMain))
+	{
             throw JSONRPCError(-100, "Unable to sign block, wallet locked?");
+	}
 
         return CheckWork(pblock, *pwalletMain, reservekey);
     }
@@ -369,10 +576,10 @@ Value getblocktemplate(const Array& params, bool fHelp)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
     if (vNodes.empty())
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "NovaCoin is not connected!");
+        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Magi is not connected!");
 
     if (IsInitialBlockDownload())
-        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "NovaCoin is downloading blocks...");
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Magi is downloading blocks...");
 
     static CReserveKey reservekey(pwalletMain);
 

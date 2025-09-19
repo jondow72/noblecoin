@@ -77,7 +77,7 @@ static bool Send(SOCKET hSocket, const char* pszSend)
 
 bool RecvLineIRC(SOCKET hSocket, string& strLine)
 {
-    loop
+    while (true)
     {
         bool fRet = RecvLine(hSocket, strLine);
         if (fRet)
@@ -100,7 +100,7 @@ bool RecvLineIRC(SOCKET hSocket, string& strLine)
 
 int RecvUntil(SOCKET hSocket, const char* psz1, const char* psz2=NULL, const char* psz3=NULL, const char* psz4=NULL)
 {
-    loop
+    while (true)
     {
         string strLine;
         strLine.reserve(10000);
@@ -127,7 +127,7 @@ bool Wait(int nSeconds)
     {
         if (fShutdown)
             return false;
-        Sleep(1000);
+        MilliSleep(1000);
     }
     return true;
 }
@@ -135,7 +135,7 @@ bool Wait(int nSeconds)
 bool RecvCodeLine(SOCKET hSocket, const char* psz1, string& strRet)
 {
     strRet.clear();
-    loop
+    while (true)
     {
         string strLine;
         if (!RecvLineIRC(hSocket, strLine))
@@ -189,7 +189,7 @@ bool GetIPFromIRC(SOCKET hSocket, string strMyName, CNetAddr& ipRet)
 void ThreadIRCSeed(void* parg)
 {
     // Make this thread recognisable as the IRC seeding thread
-    RenameThread("bitcoin-ircseed");
+    RenameThread("noblecoin-ircseed");
 
     try
     {
@@ -260,7 +260,7 @@ void ThreadIRCSeed2(void* parg)
         if (!fNoListen && GetLocal(addrLocal, &addrIPv4) && nNameRetry<3)
             strMyName = EncodeAddress(GetLocalAddress(&addrConnect));
         if (strMyName == "")
-            strMyName = strprintf("x%"PRI64u"", GetRand(1000000000));
+            strMyName = strprintf("x%" PRI64u "", GetRand(1000000000));
 
         Send(hSocket, strprintf("NICK %s\r", strMyName.c_str()).c_str());
         Send(hSocket, strprintf("USER %s 8 * : %s\r", strMyName.c_str(), strMyName.c_str()).c_str());
@@ -284,7 +284,7 @@ void ThreadIRCSeed2(void* parg)
                 return;
         }
         nNameRetry = 0;
-        Sleep(500);
+        MilliSleep(500);
 
         // Get our external IP from the IRC server and re-nick before joining the channel
         CNetAddr addrFromIRC;
@@ -302,16 +302,16 @@ void ThreadIRCSeed2(void* parg)
         }
 
         if (fTestNet) {
-            Send(hSocket, "JOIN #novacoinTEST2\r");
-            Send(hSocket, "WHO #novacoinTEST2\r");
+            Send(hSocket, "JOIN #noblecoinTEST3\r");
+            Send(hSocket, "WHO #noblecoinTEST3\r");
         } else {
-            // randomly join #novacoin00-#novacoin05
+            // randomly join #noblecoin00-#noblecoin05
             // int channel_number = GetRandInt(5);
 
             // Channel number is always 0 for initial release
             int channel_number = 0;
-            Send(hSocket, strprintf("JOIN #novacoin%02d\r", channel_number).c_str());
-            Send(hSocket, strprintf("WHO #novacoin%02d\r", channel_number).c_str());
+            Send(hSocket, strprintf("JOIN #noblecoinpos%02d\r", channel_number).c_str());
+            Send(hSocket, strprintf("WHO #noblecoinpos%02d\r", channel_number).c_str());
         }
 
         int64 nStart = GetTime();

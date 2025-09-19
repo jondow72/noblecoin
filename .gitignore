@@ -1,8 +1,9 @@
+*.tar.gz
+*.ext
 src/*.exe
-src/bitcoin
-src/bitcoind
-src/test_bitcoin
-src/build.h
+src/noblecoin
+src/noblecoind
+src/test_noblecoin
 .*.swp
 *.*~*
 *.bak
@@ -10,15 +11,27 @@ src/build.h
 *.orig
 *.o
 *.patch
-.bitcoin
-#compilation and Qt preprocessor part
+*.mod
+.noblecoin
+
+# Compilation and Qt preprocessor part
 *.qm
 Makefile
-bitcoin-qt
-#resources cpp
+noblecoin-qt
+noblecoin-qt_*
+Noblecoin-Qt.app
+
+# Unit-tests
+Makefile.test
+noblecoin-qt_test
+
+# Resources cpp
 qrc_*.cpp
-#qt creator
+qt-builds/version-og/qrc_*.cpp
+
+# Qt creator
 *.pro.user
-#mac specific
+
+# Mac specific
 .DS_Store
 build

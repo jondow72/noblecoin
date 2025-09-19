@@ -20,7 +20,7 @@ double GetDifficulty(const CBlockIndex* blockindex)
         if (pindexBest == NULL)
             return 1.0;
         else
-            blockindex = GetLastBlockIndex(pindexBest, false);
+            blockindex = GetLastBlockIndex(pindexBest, false);	// PoW
     }
 
     int nShift = (blockindex->nBits >> 24) & 0xff;
@@ -42,6 +42,110 @@ double GetDifficulty(const CBlockIndex* blockindex)
     return dDiff;
 }
 
+
+double GetPoSKernelPS(const CBlockIndex* blockindex, int lookup)
+{
+    int nPoSInterval = lookup;
+    double dStakeKernelsTriedAvg = 0;
+    int nStakesHandled = 0, nStakesTime = 0;
+
+    const CBlockIndex* pindex = ((blockindex == NULL) ? GetLastBlockIndex(pindexBest, true) : blockindex);
+    const CBlockIndex* pindexPrevStake = NULL;
+
+    while (pindex && nStakesHandled < nPoSInterval)
+    {
+        if (pindex->IsProofOfStake())
+        {
+            dStakeKernelsTriedAvg += GetDifficulty(pindex) * 4294967296.0;
+            nStakesTime += pindexPrevStake ? (pindexPrevStake->nTime - pindex->nTime) : 0;
+            pindexPrevStake = pindex;
+            nStakesHandled++;
+        }
+
+        pindex = pindex->pprev;
+    }
+
+    return nStakesTime ? dStakeKernelsTriedAvg / nStakesTime : 0;
+}
+
+// hashrate = diff * 2^32/blocktime = diff * 4 294 967 296 / blocktime
+double GetPoSKernelPSV2(const CBlockIndex* blockindex, int lookup)
+{
+    int nPoSInterval = lookup;
+    double diffTot = 0.;
+
+    const CBlockIndex* pindex0 = ((blockindex == NULL) ? GetLastBlockIndex(pindexBest, true) : blockindex);
+    const CBlockIndex* pindexPrev = GetLastPoSBlockIndex(pindex0);
+    if (pindexPrev == NULL || !pindexPrev->nHeight) return 0;
+    const CBlockIndex* pindexPrevPrev = GetLastPoSBlockIndex(pindexPrev->pprev);
+    if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) return 0;
+
+    int nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime(), nActualBlockTimeTot = nActualBlockTime;
+    int nStakesHandled = 1;
+//    if (nActualBlockTime <= 0) {
+//	nActualBlockTimeTot = 0;
+//	nStakesHandled = 0;
+//    }
+//    else {
+      diffTot = GetDifficulty(pindexPrev);
+//    }
+    for(int i = 1; i < nPoSInterval; i++)
+    {
+	pindexPrev = pindexPrevPrev;
+	pindexPrevPrev = GetLastPoSBlockIndex(pindexPrev->pprev);
+	if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) break;
+	nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+//	if (nActualBlockTime > 0)
+//	{
+	    diffTot += GetDifficulty(pindexPrev);
+	    nActualBlockTimeTot += nActualBlockTime;
+	    nStakesHandled++;
+//	}
+    }
+    if (nActualBlockTimeTot == 0 || nStakesHandled == 0) return 0;
+
+    return diffTot*4294967296.0/double(nActualBlockTimeTot);
+}
+
+double GetPoSKernelPSV3(const CBlockIndex* blockindex)
+{
+    int nPoSInterval = 72;
+    double dStakeKernelsTriedAvg = 0., diff = 0.;
+
+    const CBlockIndex* pindex0 = ((blockindex == NULL) ? GetLastBlockIndex(pindexBest, true) : blockindex);
+    const CBlockIndex* pindexPrev = GetLastPoSBlockIndex(pindex0);
+    if (pindexPrev == NULL || !pindexPrev->nHeight) return 0;
+    const CBlockIndex* pindexPrevPrev = GetLastPoSBlockIndex(pindexPrev->pprev);
+    if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) return 0;
+
+    int nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime(), nActualBlockTimeTot = nActualBlockTime;
+    int nStakesHandled = 1;
+    if (nActualBlockTime <= 0) {
+	nActualBlockTimeTot = 0;
+	nStakesHandled = 0;
+    }
+    else {
+      diff = GetDifficulty(pindexPrev);
+      dStakeKernelsTriedAvg = GetDifficulty(pindexPrev) * 4294967296.0 / double(nActualBlockTime);
+    }
+    for(int i = 1; i < nPoSInterval; i++)
+    {
+	pindexPrev = pindexPrevPrev;
+	pindexPrevPrev = GetLastPoSBlockIndex(pindexPrev->pprev);
+	if (pindexPrevPrev == NULL || !pindexPrevPrev->nHeight) break;
+	nActualBlockTime = pindexPrev->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+	if (nActualBlockTime > 0)
+	{
+	    diff += GetDifficulty(pindexPrev);
+	    dStakeKernelsTriedAvg += GetDifficulty(pindexPrev) * 4294967296.0 / double(nActualBlockTime);
+	    nActualBlockTimeTot += nActualBlockTime;
+	    nStakesHandled++;
+	}
+    }
+    if (nActualBlockTimeTot == 0 || nStakesHandled == 0) return 0;
+
+    return dStakeKernelsTriedAvg / double(nStakesHandled);
+}
 
 Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool fPrintTransactionDetail)
 {
@@ -68,7 +172,7 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool fPri
     result.push_back(Pair("flags", strprintf("%s%s", blockindex->IsProofOfStake()? "proof-of-stake" : "proof-of-work", blockindex->GeneratedStakeModifier()? " stake-modifier": "")));
     result.push_back(Pair("proofhash", blockindex->IsProofOfStake()? blockindex->hashProofOfStake.GetHex() : blockindex->GetBlockHash().GetHex()));
     result.push_back(Pair("entropybit", (int)blockindex->GetStakeEntropyBit()));
-    result.push_back(Pair("modifier", strprintf("%016"PRI64x, blockindex->nStakeModifier)));
+    result.push_back(Pair("modifier", strprintf("%016" PRI64x , blockindex->nStakeModifier)));
     result.push_back(Pair("modifierchecksum", strprintf("%08x", blockindex->nStakeModifierChecksum)));
     Array txinfo;
     BOOST_FOREACH (const CTransaction& tx, block.vtx)
@@ -118,6 +222,16 @@ Value getdifficulty(const Array& params, bool fHelp)
     return obj;
 }
 
+
+Value getdifficultym(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getdifficultym\n"
+            "Returns the proof-of-work difficulty as a multiple of the minimum difficulty.");
+
+    return GetDifficulty();
+}
 
 Value settxfee(const Array& params, bool fHelp)
 {
@@ -209,6 +323,7 @@ Value getblockbynumber(const Array& params, bool fHelp)
 
     return blockToJSON(block, pblockindex, params.size() > 1 ? params[1].get_bool() : false);
 }
+
 
 // ppcoin: get information of sync-checkpoint
 Value getcheckpoint(const Array& params, bool fHelp)

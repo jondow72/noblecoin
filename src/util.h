@@ -10,9 +10,9 @@
 #ifndef WIN32
 #include <sys/types.h>
 #include <sys/time.h>
-#include <sys/resource.h>
-#else
 typedef int pid_t; /* define for Windows compatibility */
+#include <sys/resource.h>
+//#else
 #endif
 #include <map>
 #include <vector>
@@ -32,10 +32,9 @@ typedef int pid_t; /* define for Windows compatibility */
 typedef long long  int64;
 typedef unsigned long long  uint64;
 
-static const int64 COIN = 1000000;
-static const int64 CENT = 10000;
+static const int64 COIN = 100000000;
+static const int64 CENT = 1000000;
 
-#define loop                for (;;)
 #define BEGIN(a)            ((char*)&(a))
 #define END(a)              ((char*)&((&(a))[1]))
 #define UBEGIN(a)           ((unsigned char*)&(a))
@@ -116,13 +115,20 @@ T* alignup(T* p)
 #endif
 #else
 #define MAX_PATH            1024
-inline void Sleep(int64 n)
-{
-    /*Boost has a year 2038 problem— if the request sleep time is past epoch+2^31 seconds the sleep returns instantly.
-      So we clamp our sleeps here to 10 years and hope that boost is fixed by 2028.*/
-    boost::thread::sleep(boost::get_system_time() + boost::posix_time::milliseconds(n>315576000000LL?315576000000LL:n));
-}
 #endif
+
+inline void MilliSleep(int64 n)
+{
+// Boost's sleep_for was uninterruptable when backed by nanosleep from 1.50
+// until fixed in 1.52. Use the deprecated sleep method for the broken case.
+// See: https://svn.boost.org/trac/boost/ticket/7238
+
+#if BOOST_VERSION >= 105000 && (!defined(BOOST_HAS_NANOSLEEP) || BOOST_VERSION >= 105200)
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(n));
+#else
+    boost::this_thread::sleep(boost::posix_time::milliseconds(n));
+#endif
+}
 
 /* This GNU C extension enables the compiler to check the format string against the parameters provided.
  * X is the number of the "format string" parameter, and Y is the number of the first variadic parameter.
@@ -228,6 +234,8 @@ uint256 GetRandHash();
 int64 GetTime();
 void SetMockTime(int64 nMockTimeIn);
 int64 GetAdjustedTime();
+int64_t GetTimeOffset();
+long hex2long(const char* hexString);
 std::string FormatFullVersion();
 std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments);
 void AddTimeData(const CNetAddr& ip, int64 nTime);
@@ -243,7 +251,7 @@ void runCommand(std::string strCommand);
 
 inline std::string i64tostr(int64 n)
 {
-    return strprintf("%"PRI64d, n);
+    return strprintf("%" PRI64d, n);
 }
 
 inline std::string itostr(int n)
@@ -267,6 +275,16 @@ inline int64 atoi64(const std::string& str)
 #else
     return strtoll(str.c_str(), NULL, 10);
 #endif
+}
+
+inline int32_t strtol(const char* psz)
+{
+    return strtol(psz, NULL, 10);
+}
+
+inline int32_t strtol(const std::string& str)
+{
+    return strtol(str.c_str(), NULL, 10);
 }
 
 inline int atoi(const std::string& str)
@@ -385,13 +403,22 @@ inline bool IsSwitchChar(char c)
 std::string GetArg(const std::string& strArg, const std::string& strDefault);
 
 /**
- * Return integer argument or default value
+ * Return 64-bit integer argument or default value
  *
  * @param strArg Argument to get (e.g. "-foo")
  * @param default (e.g. 1)
  * @return command-line argument (0 if invalid number) or default value
  */
-int64 GetArg(const std::string& strArg, int64 nDefault);
+int64_t GetArg(const std::string& strArg, int64_t nDefault);
+
+/**
+ * Return 32-bit integer argument or default value
+ *
+ * @param strArg Argument to get (e.g. "-foo")
+ * @param default (e.g. 1)
+ * @return command-line argument (0 if invalid number) or default value
+ */
+int32_t GetArgInt(const std::string& strArg, int32_t nDefault);
 
 /**
  * Return boolean argument or default value
@@ -420,115 +447,27 @@ bool SoftSetArg(const std::string& strArg, const std::string& strValue);
  */
 bool SoftSetBoolArg(const std::string& strArg, bool fValue);
 
-
-
-
-
-
-
-
-
-template<typename T1>
-inline uint256 Hash(const T1 pbegin, const T1 pend)
+/**
+ * MWC RNG of George Marsaglia
+ * This is intended to be fast. It has a period of 2^59.3, though the
+ * least significant 16 bits only have a period of about 2^30.1.
+ *
+ * @return random value
+ */
+extern uint32_t insecure_rand_Rz;
+extern uint32_t insecure_rand_Rw;
+static inline uint32_t insecure_rand(void)
 {
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256((pbegin == pend ? pblank : (unsigned char*)&pbegin[0]), (pend - pbegin) * sizeof(pbegin[0]), (unsigned char*)&hash1);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
+    insecure_rand_Rz = 36969 * (insecure_rand_Rz & 65535) + (insecure_rand_Rz >> 16);
+    insecure_rand_Rw = 18000 * (insecure_rand_Rw & 65535) + (insecure_rand_Rw >> 16);
+    return (insecure_rand_Rw << 16) + insecure_rand_Rz;
 }
 
-class CHashWriter
-{
-private:
-    SHA256_CTX ctx;
-
-public:
-    int nType;
-    int nVersion;
-
-    void Init() {
-        SHA256_Init(&ctx);
-    }
-
-    CHashWriter(int nTypeIn, int nVersionIn) : nType(nTypeIn), nVersion(nVersionIn) {
-        Init();
-    }
-
-    CHashWriter& write(const char *pch, size_t size) {
-        SHA256_Update(&ctx, pch, size);
-        return (*this);
-    }
-
-    // invalidates the object
-    uint256 GetHash() {
-        uint256 hash1;
-        SHA256_Final((unsigned char*)&hash1, &ctx);
-        uint256 hash2;
-        SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-        return hash2;
-    }
-
-    template<typename T>
-    CHashWriter& operator<<(const T& obj) {
-        // Serialize to this stream
-        ::Serialize(*this, obj, nType, nVersion);
-        return (*this);
-    }
-};
-
-
-template<typename T1, typename T2>
-inline uint256 Hash(const T1 p1begin, const T1 p1end,
-                    const T2 p2begin, const T2 p2end)
-{
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, (p1begin == p1end ? pblank : (unsigned char*)&p1begin[0]), (p1end - p1begin) * sizeof(p1begin[0]));
-    SHA256_Update(&ctx, (p2begin == p2end ? pblank : (unsigned char*)&p2begin[0]), (p2end - p2begin) * sizeof(p2begin[0]));
-    SHA256_Final((unsigned char*)&hash1, &ctx);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
-
-template<typename T1, typename T2, typename T3>
-inline uint256 Hash(const T1 p1begin, const T1 p1end,
-                    const T2 p2begin, const T2 p2end,
-                    const T3 p3begin, const T3 p3end)
-{
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, (p1begin == p1end ? pblank : (unsigned char*)&p1begin[0]), (p1end - p1begin) * sizeof(p1begin[0]));
-    SHA256_Update(&ctx, (p2begin == p2end ? pblank : (unsigned char*)&p2begin[0]), (p2end - p2begin) * sizeof(p2begin[0]));
-    SHA256_Update(&ctx, (p3begin == p3end ? pblank : (unsigned char*)&p3begin[0]), (p3end - p3begin) * sizeof(p3begin[0]));
-    SHA256_Final((unsigned char*)&hash1, &ctx);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
-
-template<typename T>
-uint256 SerializeHash(const T& obj, int nType=SER_GETHASH, int nVersion=PROTOCOL_VERSION)
-{
-    CHashWriter ss(nType, nVersion);
-    ss << obj;
-    return ss.GetHash();
-}
-
-inline uint160 Hash160(const std::vector<unsigned char>& vch)
-{
-    uint256 hash1;
-    SHA256(&vch[0], vch.size(), (unsigned char*)&hash1);
-    uint160 hash2;
-    RIPEMD160((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
+/**
+ * Seed insecure_rand using the random pool.
+ * @param Deterministic Use a determinstic seed
+ */
+void seed_insecure_rand(bool fDeterministic=false);
 
 
 /** Median filter over a stream of values.
@@ -540,6 +479,7 @@ private:
     std::vector<T> vValues;
     std::vector<T> vSorted;
     unsigned int nSize;
+    T tInitial;
 public:
     CMedianFilter(unsigned int size, T initial_value):
         nSize(size)
@@ -547,6 +487,7 @@ public:
         vValues.reserve(size);
         vValues.push_back(initial_value);
         vSorted = vValues;
+        tInitial = initial_value;
     }
 
     void input(T value)
@@ -556,6 +497,27 @@ public:
             vValues.erase(vValues.begin());
         }
         vValues.push_back(value);
+
+        vSorted.resize(vValues.size());
+        std::copy(vValues.begin(), vValues.end(), vSorted.begin());
+        std::sort(vSorted.begin(), vSorted.end());
+    }
+
+    // remove last instance of a value
+    void removeLast(T value)
+    {
+        for (int i = vValues.size()-1; i >= 0; --i)
+        {
+            if (vValues[i] == value)
+            {
+                vValues.erase(vValues.begin()+i);
+                break;
+            }
+        }
+        if (vValues.empty())
+        {
+            vValues.push_back(tInitial);
+        }
 
         vSorted.resize(vValues.size());
         std::copy(vValues.begin(), vValues.end(), vSorted.begin());
